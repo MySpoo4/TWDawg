@@ -12,6 +12,11 @@ pub struct TWDawgBuilder<'words> {
     previous_word: RevWord<'words>,
 }
 
+// Only non-empty words made of ASCII letters can be stored
+pub(crate) fn is_valid_word(word: &str) -> bool {
+    !word.is_empty() && word.bytes().all(|b| b.is_ascii_alphabetic())
+}
+
 impl<'word> TWDawgBuilder<'word> {
     fn new() -> Self {
         let mut nodes = Vec::new();
@@ -25,10 +30,12 @@ impl<'word> TWDawgBuilder<'word> {
         }
     }
 
+    // Words that aren't valid (see `is_valid_word`) are skipped
     pub fn build_one_way<'words, I: IntoIterator<Item = &'words str>>(words: I) -> TWDawg {
         // efficient ways to store the reverse word iterations
         let mut rev_words: Vec<RevWord> = words
             .into_iter()
+            .filter(|w| is_valid_word(w))
             .map(|w| RevWord {
                 word: w,
                 rev_idx: 1,
@@ -43,10 +50,12 @@ impl<'word> TWDawgBuilder<'word> {
         builder.finalize()
     }
 
+    // Words that aren't valid (see `is_valid_word`) are skipped
     pub fn build<'words, I: IntoIterator<Item = &'words str>>(words: I) -> TWDawg {
         // efficient ways to store the reverse word iterations
         let mut rev_words: Vec<RevWord> = words
             .into_iter()
+            .filter(|w| is_valid_word(w))
             .flat_map(|w| RevWord::build_all(w))
             .collect();
 
@@ -89,12 +98,12 @@ impl<'word> TWDawgBuilder<'word> {
     fn minimize(&mut self, prefix_len: usize) {
         while self.unchecked.len() > prefix_len {
             let (parent_id, c, child_id) = self.unchecked.pop().unwrap();
-            let child = self.nodes.get(child_id).unwrap();
 
-            if let Some(&new_child_id) = self.minimized.get(child) {
-                // Reduces node count (prob???)
-                self.nodes.get_mut(new_child_id).unwrap().is_terminal |= child.is_terminal;
-                self.nodes.remove(child_id);
+            if let Some(&new_child_id) = self.minimized.get(&self.nodes[child_id]) {
+                // The duplicate is always the newest node, so dropping it
+                // doesn't shift any other node's id
+                debug_assert_eq!(child_id, self.nodes.len() - 1);
+                self.nodes.pop();
 
                 self.nodes.get_mut(parent_id).unwrap().set(c, new_child_id);
             } else {

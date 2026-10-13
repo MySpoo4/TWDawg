@@ -1,6 +1,6 @@
-use crate::utils::StrBuilder;
+use crate::utils::{RevWord, StrBuilder};
 
-use super::{TWDNode, node::ALPHABET_SIZE};
+use super::{TWDNode, builder::is_valid_word, node::ALPHABET_SIZE};
 
 #[derive(Debug)]
 pub struct TWDawg {
@@ -21,25 +21,40 @@ impl TWDawg {
     }
 
     pub fn contains(&self, word: &str) -> bool {
-        // root node
-        let mut cur_node = self.get_node(0);
-
-        for c in word.to_ascii_uppercase().chars().rev() {
-            cur_node = match cur_node.get(c as u8) {
-                Some(id) => self.get_node(id),
-                None => return false,
-            }
+        if !is_valid_word(word) {
+            return false;
         }
 
-        cur_node
-            .get('[' as u8)
-            .map_or(false, |n| self.get_node(n).is_terminal)
+        // Follow the path both builders store: first letter, separator, rest of the word
+        RevWord::build(word, 1)
+            .iter_all()
+            .try_fold(self.get_node(0), |node, c| {
+                node.get(c as u8).map(|id| self.get_node(id))
+            })
+            .is_some_and(|node| node.is_terminal)
     }
 
     pub fn get_all_words(&self) -> Vec<String> {
         let mut words = Vec::new();
         let mut builder = StrBuilder::new();
-        self.get_words_helper(&mut words, &mut builder, 0);
+
+        // Only walk the first letter -> separator path so each word is found once
+        let root = self.get_node(0);
+        root.edges
+            .iter()
+            .take(ALPHABET_SIZE)
+            .enumerate()
+            .for_each(|(i, &id)| {
+                let Some(rev_id) = id.and_then(|id| self.get_node(id).edges[ALPHABET_SIZE]) else {
+                    return;
+                };
+
+                builder.push(char::from_u32((i + 65) as u32).unwrap());
+                builder.update_rev();
+                self.get_words_helper(&mut words, &mut builder, rev_id);
+                builder.revert_rev();
+                builder.pop();
+            });
 
         words
     }
@@ -62,11 +77,5 @@ impl TWDawg {
                     builder.pop();
                 }
             });
-
-        if let Some(node_id) = node.edges[ALPHABET_SIZE] {
-            builder.update_rev();
-            self.get_words_helper(words, builder, node_id);
-            builder.revert_rev();
-        }
     }
 }

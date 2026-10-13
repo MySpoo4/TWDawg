@@ -34,14 +34,14 @@ impl TWDNode {
     }
 
     pub fn contains_edge(&self, c: u8) -> bool {
-        self.edges[(c - b'A') as usize].is_some()
+        (b'A'..=b'[').contains(&c) && self.get(c).is_some()
     }
 }
 
 // Ignore `id` for equality checks
 impl PartialEq for TWDNode {
     fn eq(&self, other: &Self) -> bool {
-        self.edges[0..ALPHABET_SIZE + 1] == other.edges[0..ALPHABET_SIZE + 1]
+        self.is_terminal == other.is_terminal && self.edges == other.edges
     }
 }
 
@@ -49,6 +49,7 @@ impl Eq for TWDNode {}
 
 impl Hash for TWDNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        self.is_terminal.hash(state);
         // faster hashing instead of hashmap
         self.edges.iter().for_each(|v| v.hash(state));
     }
